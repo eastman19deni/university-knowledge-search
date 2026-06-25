@@ -1,0 +1,107 @@
+import uuid
+from datetime import UTC, datetime
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+from fastapi.testclient import TestClient
+
+from backend.app.core.config import settings
+from backend.app.db.session import get_db_session
+from backend.app.main import app
+
+
+async def override_db_session():
+    yield AsyncMock()
+
+
+app.dependency_overrides[get_db_session] = override_db_session
+client = TestClient(app)
+
+
+def test_upload_pdf(monkeypatch) -> None:
+    content = b"%PDF-1.4 test document"
+    document_uuid = uuid.uuid4()
+    created_at = datetime.now(UTC)
+    monkeypatch.setattr(
+        "backend.app.api.v1.documents.save_document",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                id=1,
+                uuid=document_uuid,
+                file_name="document.pdf",
+                file_path=f"uploads/{document_uuid}.pdf",
+                created_at=created_at,
+            )
+        ),
+    )
+
+    response = client.post(
+        "/api/v1/documents/upload",
+        files={"file": ("document.pdf", content, "application/pdf")},
+    )
+
+    assert response.status_code == 201
+    assert response.json() == {
+        "id": 1,
+        "uuid": str(document_uuid),
+        "file_name": "document.pdf",
+        "file_path": f"uploads/{document_uuid}.pdf",
+        "created_at": created_at.isoformat().replace("+00:00", "Z"),
+    }
+
+
+def test_upload_docx(monkeypatch) -> None:
+    content = b"test docx content"
+    document_uuid = uuid.uuid4()
+    monkeypatch.setattr(
+        "backend.app.api.v1.documents.save_document",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                id=2,
+                uuid=document_uuid,
+                file_name="document.DOCX",
+                file_path=f"uploads/{document_uuid}.docx",
+                created_at=datetime.now(UTC),
+            )
+        ),
+    )
+
+    response = client.post(
+        "/api/v1/documents/upload",
+        files={
+            "file": (
+                "document.DOCX",
+                content,
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["file_name"] == "document.DOCX"
+
+
+def test_wrong_extension() -> None:
+    response = client.post(
+        "/api/v1/documents/upload",
+        files={"file": ("notes.txt", b"text", "text/plain")},
+    )
+
+    assert response.status_code == 415
+    assert response.json() == {
+        "detail": "Only PDF and DOCX files are allowed"
+    }
+
+
+def test_big_file() -> None:
+    content = b"x" * (settings.max_upload_size_bytes + 1)
+
+    response = client.post(
+        "/api/v1/documents/upload",
+        files={"file": ("large.pdf", content, "application/pdf")},
+    )
+
+    assert response.status_code == 413
+    assert response.json() == {
+        "detail": "File size must not exceed 20 MB"
+    }
