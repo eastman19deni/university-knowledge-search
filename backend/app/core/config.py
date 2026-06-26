@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     max_upload_size_bytes: int = 20 * 1024 * 1024
     upload_dir: Path = Path("uploads")
+    chunk_size: int = 1000
+    chunk_overlap: int = 100
 
     postgres_host: str = "localhost"
     postgres_port: int = 5432

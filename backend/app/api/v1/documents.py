@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.core.config import settings
 from backend.app.db.session import get_db_session
 from backend.app.schemas.document import DocumentUploadResponse
+from backend.app.services.document_processing import process_document
 from backend.app.services.document_upload import (
     save_document,
     validate_and_measure_file,
@@ -28,6 +29,11 @@ async def upload_document(
         file=file,
         max_size_bytes=settings.max_upload_size_bytes,
     )
+    processing_result = await process_document(
+        file=file,
+        chunk_size=settings.chunk_size,
+        chunk_overlap=settings.chunk_overlap,
+    )
     document = await save_document(
         file=file,
         upload_dir=settings.upload_dir,
@@ -40,4 +46,6 @@ async def upload_document(
         file_name=document.file_name,
         file_path=document.file_path,
         created_at=document.created_at,
+        extracted_characters=len(processing_result.text),
+        chunks_count=len(processing_result.chunks),
     )

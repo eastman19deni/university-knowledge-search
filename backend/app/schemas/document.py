@@ -10,3 +10,5 @@ class DocumentUploadResponse(BaseModel):
     file_name: str
     file_path: str
     created_at: datetime
+    extracted_characters: int
+    chunks_count: int
