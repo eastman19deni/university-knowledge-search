@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from backend.app.core.config import settings
 from backend.app.db.session import get_db_session
 from backend.app.main import app
+from backend.app.services.document_processing import ProcessingResult
 
 
 async def override_db_session():
@@ -22,6 +23,15 @@ def test_upload_pdf(monkeypatch) -> None:
     content = b"%PDF-1.4 test document"
     document_uuid = uuid.uuid4()
     created_at = datetime.now(UTC)
+    monkeypatch.setattr(
+        "backend.app.api.v1.documents.process_document",
+        AsyncMock(
+            return_value=ProcessingResult(
+                text="PDF document text",
+                chunks=["PDF document text"],
+            )
+        ),
+    )
     monkeypatch.setattr(
         "backend.app.api.v1.documents.save_document",
         AsyncMock(
@@ -47,12 +57,23 @@ def test_upload_pdf(monkeypatch) -> None:
         "file_name": "document.pdf",
         "file_path": f"uploads/{document_uuid}.pdf",
         "created_at": created_at.isoformat().replace("+00:00", "Z"),
+        "extracted_characters": 17,
+        "chunks_count": 1,
     }
 
 
 def test_upload_docx(monkeypatch) -> None:
     content = b"test docx content"
     document_uuid = uuid.uuid4()
+    monkeypatch.setattr(
+        "backend.app.api.v1.documents.process_document",
+        AsyncMock(
+            return_value=ProcessingResult(
+                text="DOCX document text",
+                chunks=["DOCX document text"],
+            )
+        ),
+    )
     monkeypatch.setattr(
         "backend.app.api.v1.documents.save_document",
         AsyncMock(
