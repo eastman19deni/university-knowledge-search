@@ -1,7 +1,8 @@
 import { useCallback, useRef, useState } from "react";
 import type { Document } from "../api/client";
-import { uploadDocument } from "../api/client";
+import { uploadDocument, HttpError } from "../api/client";
 import { formatDate, getStatusLabel } from "../utils/highlight";
+import { ErrorDisplay } from "./ErrorDisplay"; 
 
 interface FileUploadProps {
   documents: Document[];
@@ -20,13 +21,22 @@ export function FileUpload({ documents, onUploaded }: FileUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [uploads, setUploads] = useState<UploadItem[]>([]);
+  const [globalError, setGlobalError] = useState<Error | HttpError | string | null>(null); // ← ДОБАВЬТЕ
 
   const handleFiles = useCallback(
     async (files: FileList | File[]) => {
+      setGlobalError(null); // ← ОЧИЩАЕМ ОШИБКУ ПРИ НОВОЙ ЗАГРУЗКЕ
+      
       const fileArray = Array.from(files).filter((file) => {
         const name = file.name.toLowerCase();
         return name.endsWith(".pdf") || name.endsWith(".docx");
       });
+
+
+      if (fileArray.length === 0) {
+        setGlobalError("Поддерживаются только файлы формата PDF и DOCX");
+        return;
+      }
 
       for (const file of fileArray) {
         const tempId = crypto.randomUUID();
@@ -64,6 +74,30 @@ export function FileUpload({ documents, onUploaded }: FileUploadProps) {
 
           onUploaded();
         } catch (error) {
+          let errorMessage = "Ошибка загрузки";
+
+          if (error instanceof HttpError) {
+            // Детальная обработка по статусу
+            if (error.status === 400) {
+              errorMessage = "Файл не прошел валидацию: " + error.message;
+            } else if (error.status === 409) {
+              errorMessage = "Такой документ уже существует: " + error.message;
+            } else if (error.status === 413) {
+              errorMessage = "Файл слишком большой. Максимальный размер: 20 МБ.";
+            } else if (error.status === 415) {
+              errorMessage = "Неподдерживаемый формат файла. Используйте PDF или DOCX.";
+            } else if (error.status === 500) {
+              errorMessage = "Ошибка сервера при обработке файла. Попробуйте позже.";
+            } else {
+              errorMessage = error.getUserMessage();
+            }
+          } else if (error instanceof Error) {
+            errorMessage = error.message;
+          }
+
+
+          setGlobalError(errorMessage);
+
           setUploads((prev) =>
             prev.map((item) =>
               item.id === tempId
@@ -71,7 +105,7 @@ export function FileUpload({ documents, onUploaded }: FileUploadProps) {
                     ...item,
                     progress: 100,
                     status: "failed",
-                    error: error instanceof Error ? error.message : "Ошибка загрузки",
+                    error: errorMessage,
                   }
                 : item,
             ),
@@ -106,6 +140,12 @@ export function FileUpload({ documents, onUploaded }: FileUploadProps) {
   return (
     <section className="upload-section card">
       <h2>Загрузка документов</h2>
+      
+
+      {globalError && (
+        <ErrorDisplay error={globalError} onRetry={() => setGlobalError(null)} />
+      )}
+      
       <div
         className={`dropzone ${dragOver ? "dropzone--active" : ""}`}
         onDragOver={(event) => {
@@ -161,6 +201,7 @@ export function FileUpload({ documents, onUploaded }: FileUploadProps) {
                   style={{ width: `${item.progress}%` }}
                 />
               </div>
+
               {item.error && <p className="error-text">{item.error}</p>}
             </li>
           ))}

@@ -1,7 +1,9 @@
+
 import { FormEvent, useEffect, useState } from "react";
 import type { SearchHistoryItem, SearchResponse } from "../api/client";
-import { fetchSearchHistory, searchDocuments } from "../api/client";
+import { fetchSearchHistory, searchDocuments, HttpError } from "../api/client";
 import { Pagination, SearchResultCard } from "../components/SearchResult";
+import { ErrorDisplay } from "../components/ErrorDisplay"; 
 
 const PAGE_SIZE = 10;
 
@@ -11,7 +13,7 @@ export default function SearchPage() {
   const [page, setPage] = useState(1);
   const [results, setResults] = useState<SearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Error | HttpError | string | null>(null); 
   const [history, setHistory] = useState<SearchHistoryItem[]>([]);
 
   useEffect(() => {
@@ -34,7 +36,7 @@ export default function SearchPage() {
         const historyData = await fetchSearchHistory();
         setHistory(historyData);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Ошибка поиска");
+        setError(err instanceof Error ? err : "Ошибка поиска");
         setResults(null);
       } finally {
         setLoading(false);
@@ -47,6 +49,11 @@ export default function SearchPage() {
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
     setPage(1);
+    setSubmittedQuery(query.trim());
+  };
+
+  const handleRetry = () => {
+    setError(null);
     setSubmittedQuery(query.trim());
   };
 
@@ -97,7 +104,9 @@ export default function SearchPage() {
       )}
 
       {loading && <div className="card">Поиск...</div>}
-      {error && <div className="card error-text">{error}</div>}
+      
+
+      {error && <ErrorDisplay error={error} onRetry={handleRetry} />}
 
       {!loading && submittedQuery && results && results.total === 0 && (
         <div className="card empty-state">
