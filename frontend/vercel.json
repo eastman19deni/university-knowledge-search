@@ -1,5 +1,5 @@
 {
-  "installCommand": "curl -fsSL https://bun.sh/install | bash && bun install",
+  "installCommand": "npm install -g bun && bun install",
   "buildCommand": "bun run build",
   "outputDirectory": "dist",
   "framework": "vite",
